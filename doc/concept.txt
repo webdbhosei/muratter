@@ -1,0 +1,35 @@
+Project Proposal
+
+	Chat Tool
+
+Chat Room:
+	Any ordinary user can create a chat room.
+		The user who created the chat room will 
+			obtain the attribute of "manager" of the room.
+
+	sub chatroom (Kadoki, Ueno, Sato)
+		Gathering(Nakamura) --> 
+			Make group of chats so that other chats could be 
+			easily seen.
+
+		Collecting chats(Ueno)
+			Anyone can make new chats group, collecting existing chats.
+			This new chats group could be sub chatroom.
+			We can chat in that sub chatroom.
+
+Reaction:
+	only stamps:
+
+Stamp:
+	Pictures(=image or short animation)
+		one stamp can be pushed to one chat.
+
+Role:
+	admin - system developer
+	manager - system's management
+	super user: chat leader
+	ordinary user
+
+
+
+
