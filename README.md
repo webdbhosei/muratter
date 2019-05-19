@@ -1,28 +1,15 @@
-<<<<<<< HEAD
 # README
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+This is WEBDB lecture material system for Hosei Univ, 2019 Spring Semester.
 
-Things you may want to cover:
+We are going to develop Chat System, called "Muratter."
 
-* Ruby version
+## Ruby version
+	>= 2.4
 
-* System dependencies
+## Rails version
+	>= 5.2
 
-* Configuration
+## Database
+	sqlite3 >=3.18
 
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
-=======
-# muratter
->>>>>>> 01af5c352b8449021cac8f84580fe31aee03c37e
