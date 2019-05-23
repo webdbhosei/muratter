@@ -1,0 +1,1 @@
+This is day6 git merge test.
