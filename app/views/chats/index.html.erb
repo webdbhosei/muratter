@@ -28,4 +28,10 @@
 
 <br>
 
-<%= link_to 'New Chat', new_chat_path %>
+<%= link_to 'New Chat', new_chat_path %><br />
+
+<%= form_tag '#', id: 'message' do %>
+  <%= text_field_tag 'body' %>
+<% end %>
+<ul id="message-list">
+</ul>
