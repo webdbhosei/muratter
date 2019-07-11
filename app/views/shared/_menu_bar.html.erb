@@ -1,8 +1,7 @@
 <% menu_items = [
-    { :link => users_path, :name => 'ユーザ一覧表示' },
-    { :link => new_user_path, :name => '新規追加' },
-    { :link => 'http://www.ruby-lang.org/ja/', :name => 'ruby 公式サイト' },
-    { :link => '', :name => '自分の課題ページ', :disabled => true }
+    { :link => chatrooms_path, :name => 'TOP' },
+    { :link => exit_chatroom_path, :name => '退室' },
+    { :link => destroy_user_session_path, :name => 'Sign Out', :method => :delete },
     ]
 -%>
 <div id="menu_bar">

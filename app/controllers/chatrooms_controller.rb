@@ -6,6 +6,10 @@ class ChatroomsController < ApplicationController
   # GET /chatrooms.json
   def index
     @chatrooms = Chatroom.all
+    session[:my_chatroom] = true
+    room_ids = Join.where(user_id: current_user.id).map(&:chatroom_id)
+    @my_rooms = []
+    room_ids.each { |id| @my_rooms.push(Chatroom.find(id)) }
   end
 
   # GET /chatrooms/1
@@ -16,6 +20,13 @@ class ChatroomsController < ApplicationController
   # GET /chatrooms/new
   def new
     @chatroom = Chatroom.new
+  end
+
+  # PUT /chatrooms/make_subchatroom
+  def make_subchatroom
+    @chatroom = Chatroom.new
+    session[:make_subchatroom] = params[:id]
+    render new
   end
 
   # GET /chatrooms/1/edit
@@ -62,6 +73,11 @@ class ChatroomsController < ApplicationController
       format.html { redirect_to chatrooms_url, notice: 'Chatroom was successfully destroyed.' }
       format.json { head :no_content }
     end
+  end
+
+  def exit_room
+     session[:chatroom_id] = nil
+     redirect_to chatrooms_path
   end
 
   private

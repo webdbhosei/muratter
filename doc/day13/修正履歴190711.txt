@@ -1,0 +1,386 @@
+2019/07/04 --> 2019/07/11 変更点
+
+URLの表記：　/127.0.0.1:3000/chats  は、　単に /chatsとする。
+
+(1) /chats
+  【目的】新しいチャットが追加された際に、データベースに保存し、過去のチャットが辿れるようにする。
+  【方法】前回、ネットを参照して、新規チャットを <ul>タグのメッセージ領域に表示するように修正した。
+    → 入力処理で、データベースに書き込む。
+    → chatsの一覧部分に、新規チャットを追記する。
+    → new chatsのリンクを削除し、画面の一番下に入力領域を用意する。
+  【関係ファイル】
+    (1) /app/views/chats/index.html.erb
+      33〜37行目
+        <%= form_tag '#', id: 'message' do %>
+          <%= text_field_tag 'body' %>
+        <% end %>
+        <ul id="message-list">
+        </ul>
+    (2) イベントハンドラ /app/assets/javascripts/application.js
+      18〜23行目
+        window.addEventListener('load', () => {
+          document.getElementById('message').onsubmit = () => {
+            App.chat.put_message(document.getElementById('body').value);
+            return false;
+          }
+        });
+    (3) /app/assets/javascripts/channels/chat.coffee
+      14〜16行目
+        put_message: (msg) ->
+          @perform('put_message', {message: msg})
+          return
+    (4) /app/channels/chat_channel.rb
+      10〜12行目
+        def put_message(data)
+          ChatChannel.broadcast_to('message', data['message'])
+        end
+  【具体的な修正】
+    第一段階：入力があった時に、データベースに書き込み、
+      ファイル(1)の15〜27行目で表示するようにする。
+      a. chat_channelで、chartをDBに保存する。
+      (4) /app/channels/chat_channel.rb
+      11〜18行目
+        chat_param = {
+          :user_id => current_user.id,
+          :content => data['message'],
+          :chat_at => Time.now,
+          :chatroom_id => 1  # ToDo: 現在入室しているchatroomを与える。
+        }
+        chat = Chat.new(chat_param)
+        chat.save
+        ==> エラーが出た。 current_userが見えない。
+        https://qiita.com/eRy-sk/items/4c4e983e34a44c5ace27
+      (5) /app/channels/application_cable/connection.rb
+        current_userが、外部から見えない、ことへの対応
+        2〜16行目
+        class Connection < ActionCable::Connection::Base
+          identified_by :current_user
+          def connect
+            self.current_user = find_verified_user
+          end
+
+          private
+            def find_verified_user
+              session_key = cookies.encrypted[Rails.application.config.session_options[:key]]
+              verified_id = session_key['warden.user.user.key'][0][0]
+              verified_user = User.find_by(id: verified_id)
+              return reject_unauthorized_connection unless verified_user
+              verified_user
+            end
+        end
+        ==> データベースには書き込めた。だが、ページを更新しないとDBからの読み出しが見えない。
+      (3) /app/assets/javascripts/channels/chat.coffee
+        received: (data) ->　で、データの処理ではなく、documentの再描画を行う。
+          window.location.reload(true)
+          1行だけにした。
+        ==> 想定どおり、ページの描画になった。
+    第一段階：new chatsのリンクを削除し、画面の一番下に入力領域を用意する。
+
+  【保留】
+    a. chatroom_idに、仮に1を入れている。　→ chatroomを選んで「入室」したら
+      そのchatroomでのchatを行うように修正し、正しいchatroom_idを与えるようにする。
+    (1) /app/views/chats/index.html.erb
+      元々の一覧表示用の記述を思い切って削り、contentと時刻のみの表示とした。
+      修正リスト：省略
+
+(2) _menu_bar
+  【目的】メニューが内容に合致していない。メニューを、以下のように作り変える。
+     TOP --> chatroom一覧 
+     「退室」 --> chatroomからTOPに戻る際に、有効とする。
+     sign_out
+  【方法】app/views/shared/_menu_bar.html.erbを編集する。     
+  【関係ファイル】
+    (1) app/views/shared/_menu_bar.html.erb
+      元のリンクを全部削除し、以下に置き換える。
+      { :link => chatrooms_path, :name => 'TOP' },
+      { :link => chatrooms_path, :name => '退室' },
+      { :link => destroy_user_session_path, :name => 'Sign Out', :method => :delete },
+    (2) config/routes.rb
+      TOPページは、chatroom内（chats）ではなく、chatrooms
+      root to: "chats#index" --> root to: "chatrooms#index"
+    (3) app/helpers/application_helper.rb
+      menu_link_toが、 deleteメソッドなど、メソッド指定のケースに対応していない。
+      以下の2行を追記する。（9〜10行目）
+        elsif item[:method]
+            link_to(item[:name], item[:link], :method => item[:method])
+
+(3) chatroomへの参加処理
+  【目的】特定のチャットルームに参加する処理を加える。
+  【方法】
+    a. 現段階では、「チャットルーム」への「参加」を表現するテーブルが用意されていない。
+      Joinテーブルを用意する。 --> モデルのみの作成
+      user_idと、chatroom_id　をフィールドとして持つ。
+      確定段階ではない（managerに、申請を出している段階である）ことを示す、pendingフラグを用意する。
+      メソッドとして、chatroom_idを引数として持つ「members(chatroom_id)
+        そのchatroomに参加しているメンバー一覧を取得する
+      と、user_idを引数として持つ「my_chatrooms(user_id)」
+        そのuserが参加しているchatroomの一覧を返す、二つのテーブルを用意する。
+    b. chatroomの一覧画面（TOP）で、そのユーザが参加を希望する場合に、「join」を
+      クリックすると参加する、ボタンを用意し、そのボタンが押された時の処理を追加する。
+    c. 自分が参加しているchatroomの一覧で、「withdraw」をクリックすると、
+    　そのチャットルームから所属しなくなるボタンを用意する。  ==> これは、次の段階で処理する。
+    d. 自分が参加しているchatroomの一覧で、「enter（入室）」をクリックすると、
+    　そのchatroomにリンクする、ボタンを用意する。
+      d-1. 入室の際には、「入室するチャットルーム」を session[:chatroom_id]に保存し、
+        セッション変数から「現在入室しているチャットルーム」の情報を取得できるようにする。
+      d-2. そのチャットルームでつぶやいた内容は、chatのchatroom_idに、session変数から
+        値を与えるようにする。（chats画面修正での、「保留」項目の解消）
+    e. chatroomsからの「退室」を処理する。
+      現時点で、呼び出し元は確認しない。 ==> 呼び出しもをの確認も必要
+      chatrooms_controllerに、exit_roomメソッドを作成する。
+        「入室」状態を保持しているのは、session[:chatroom_id]なので、
+        「退室」の際には、これをnilにするようにして、chatroomsのindexにリダイレクトする。
+
+  【具体的な作業】
+    a. 以下のコマンドを実行した。
+      rails generate model join user_id:integer chatroom_id:integer pending:integer
+        Running via Spring preloader in process 11031
+          invoke  active_record
+          create    db/migrate/20190710122243_create_joins.rb
+          create    app/models/join.rb
+          invoke    test_unit
+          create      test/models/join_test.rb
+        create      test/fixtures/joins.yml
+      ==> Joinクラスが生成された。データベースの生成がまだ。
+    b. migrationを実行する。以下のコマンドを実行
+      rake db:migrate
+        == 20190710122243 CreateJoins: migrating ======================================
+        -- create_table(:joins)
+             -> 0.0025s
+        == 20190710122243 CreateJoins: migrated (0.0026s) =============================
+    c. リレーションの設定
+      join.rb
+        belongs_to :user
+        belongs_to :chatroom
+      user.rb
+        has_many :joins
+      chatroom.rb
+        has_many :joins
+    d. chatroomの一覧画面で、joinをクリックした場合の処理のコントローラを用意する。
+      コントローラで実行すること
+        chatroom一覧の、[Join（参加）]ボタンをクリックしたら、
+          join_controllerの confirm 画面を表示する。
+        confirm画面で「〜〜の部屋（chatroomの名前）に参加しますか？」と表示し、
+          [OK]をクリックしたら join メソッドを実行する。
+            join メソッドでは、
+              session[:chatroom_id]（セッション変数：現在参加しているチャットルームのID）に
+              そのchatroomのidを設定し、chats（チャット画面）にリダイレクトする。
+      このような設計を行うため、以下のコマンドを実行する。　joinメソッドは、手打ちする。
+        rails generate controller join confirm
+        Running via Spring preloader in process 11329
+          create  app/controllers/join_controller.rb
+           route  get 'join/confirm'
+          invoke  erb
+          create    app/views/join
+          create    app/views/join/confirm.html.erb
+          invoke  test_unit
+          create    test/controllers/join_controller_test.rb
+          invoke  helper
+          create    app/helpers/join_helper.rb
+          invoke    test_unit
+          invoke  assets
+          invoke    coffee
+          create      app/assets/javascripts/join.coffee
+          invoke    scss
+          create      app/assets/stylesheets/join.scss
+        生成されたパスを確認する。
+        rake routesコマンドを実行
+                   Prefix Verb   URI Pattern                      Controller#Action
+             join_confirm GET    /join/confirm(.:format)          join#confirm
+         join_confirm_pathへのリンクボタンを作成する
+         ==> 自動で、routes (URL)が生成されたが、getだけだと、chatroom_idの値を渡せない。
+    e. join_controller への、routingパスを変更する。
+      get 'join/confirm'
+         ↓
+      put 'join/confirm/:id' => "join#confirm", :as => 'join_confirm'
+      put 'join/join/:id' => "join#join", :as => 'join_join'
+    f. join_controllerの confirmメソッドと、 joinメソッドを作成する。
+        class JoinController < ApplicationController
+          def confirm
+              @chatroom = Chatroom.find(params[:id])
+          end
+
+          def join
+             join_params = {
+                 :user_id => current_user.id,
+                 :chatroom_id => params[:id],
+                 :pending => 0,  # ToDo: 現在、常にmanagerの確認なしで参加
+             }
+             @join = Join.new(join_params)
+             @join.save
+             session[:chatroom_id] = params[:id]
+             redirect_to chats_path(params[:id])
+          end
+        end
+    g. app/views/join/confirm.html.erbを修正
+      ==> できれば、POP UPにしたい。
+        <h1>Chat roomへの参加確認</h1>
+
+        <%= @chatroom.name + "に参加しますか？" %>
+        <br /><br />
+        <%= form_tag "/join/join/" + @chatroom.id.to_s, :method => 'put' do %>
+          <%= submit_tag "参加します", :name => "Join" %>
+        <% end %>
+
+        <%= link_to "参加しません", chatrooms_path %>
+    h. chatroomsのindexを修正
+       表示のリンクを削除
+       編集と削除のボタンをコメントアウト： managerのみがこれらの処理を実行できるようにする。
+       参加ボタンを追加する。
+    i. chatroomsからの「退室」を処理する。
+      chatrooms_controllerに、exit_roomメソッドを作成する。
+        「入室」状態を保持しているのは、session[:chatroom_id]なので、
+        「退室」の際には、これをnilにするようにして、chatroomsのindexにリダイレクトする。
+        def exit_room
+           session[:chatroom_id] = nil
+           redirect_to chatrooms_path
+        end
+    j. config/routes.rbに、以下の1行を追加
+      get 'chatrooms/exit' => 'chatrooms#exit_room', :as => 'exit_chatroom'
+    k. app/views/shared/_menu_bar.html.erb
+      メニューの「退室」を、chatrooms#exit_roomのパスに切り替える。
+        { :link => exit_chatroom_path, :name => '退室' },
+     ==> chatroomsから「退室」する際に、session[:chatroom_id]をnilに戻ることを確認した。
+  【保留】
+    a. 参加希望者が、いきなりchatroomに参加している。希望者リスト（pending）を表示して、
+    　　managerが個別に「許可」「拒否」を選べるような処理がまだ。
+    b. chatroomsの一覧で、自分が参加しているchatroomsにも「join(参加)」ボタンが表示される。
+      　自分が参加しているchatroomでは、「参加」ボタンは要らないはず
+    c. confirm.html.erb ==> POP UPにしたい
+
+(4) chatroomへの入室処理
+  【目的】自分が参加しているチャットルームに入室する処理を加える。
+  【方法】
+    a. 現時点では、chatrooms/index のメインのペインには、全てのchatroomの一覧が表示されている。
+      右半分の画面、 _right_bar.html.erbを活用して、chatroomsのindex画面では、右半分に
+      自分が参加しているchatroomの一覧を表示できるようにしたい。
+      ==> session[:my_chatroom] に trueを設定し、表示処理が終わったら nilに戻すようにする。
+
+  【具体的な作業】
+    a. chatroomsのindexで、session[:my_chatroom]をtrueに設定する。
+    　また、現在自分が参加しているchatroomsの名称の一覧を取得して、viewsで表示できるようにする。
+      app/controllers/chatrooms_controller.rb  の indexメソッド
+          session[:my_chatroom] = true
+      @my_rooms　を設定する。
+          room_ids = Join.where(user_id: current_user.id).map(&:chatroom_id)
+          @my_rooms = []
+          room_ids.each { |id| @my_rooms.push(Chatroom.find(id)) }
+    b. _right_bar.html.erbで、session変数が設定されている時、@my_roomsを表示する。
+      <% if session[:my_chatroom] %>
+        <% if @my_rooms and @my_rooms.count>0 %>
+          <% @my_rooms.each do |my_room| %>
+            <%= my_room.name %>
+          <% end %>
+        <% else %>
+        どこのchatroomにも参加していません。
+        <% end %>
+      <% else %>
+        広告募集中
+      <% end %>
+    c. app/assets/stylesheets/scaffold.scss で、right領域の属性を変更
+      div#right {
+        float: right;
+        align: left;
+        background-color: lightgreen;
+      }
+    d. _right_bar.html.erbで、@my_room表示の後に、「入室」ボタンを追加する。
+              <%= form_tag "/join/enter/" + chatroom.id.to_s, :method => 'put' do %>
+                  <%= submit_tag "入室", :name => "Enter" %>
+              <% end %>
+    e. joinコントローラに、enterメソッドを追加する。
+        # 既に、joinテーブルには追加済みなので、入室処理のみ
+        def enter
+            session[:chatroom_id] = params[:id]
+            redirect_to chats_path(params[:id])
+        end
+    r. config/routes.rb に、enterメソッドへのパス(URL)を追加する。
+      put 'join/enter/:id' => "join#enter", :as => 'join_enter'
+    ==> 参加、入室、退室の処理が動作した。
+
+  【保留】
+    a. どのchatroomに入室しても、同じ表示（部屋で区別していない）
+
+(5) chatroom別のchat
+  【目的】chatroomごとに異なるchatを表示する。
+    どのchatroomに入室しても、同じ表示（部屋で区別していない）
+  【方法】
+    a. chatsのindexページで、「chatroom」の名称を表示する。
+    b. chatsのcontrollerの indexで、session[:chatroom_id]を
+      chatsの検索条件に追加する。
+  【具体的な作業】
+    a. app/views/chats/index.html.erbで、部屋の名前を表示する。
+      <h1>Chats</h1>
+        ↓
+      <h1><%= @chatroom.name %></h1>
+    b. app/controllers/chats_controller.rb の indexメソッドで、
+        @chatroom = Chatroom.find(session[:chatroom_id])
+        @chats = Chat.all
+        ↓
+        @chats = Chat.where(chatroom_id: session[:chatroom_id])
+    c. /chatsでの修正　app/channels/chat_channel.rb  の 15行目
+          :chatroom_id => session[:chatroom_id]
+      ==> session変数が、Channelでは取れない・・・
+    d. app/views/chats/index.html.erb で、隠しフィールドを追加
+        <%= hidden_field_tag 'room', session[:chatroom_id] %>
+        パラメータを追加する。
+    e. app/assets/javascripts/application.js で、イベントハンドラの
+      パラメータを追加する。
+       document.getElementById('message').onsubmit = () => {
+         App.chat.put_message(document.getElementById('body').value,
+                              document.getElementById('room').value);
+         return false;
+       }
+    f. app/assets/javascripts/channels/chat.coffee
+      put_message: (msg, room) ->
+        @perform('put_message', {message: msg, room_id:room})
+        return
+    cの再修正. /chatsでの修正　app/channels/chat_channel.rb  の 15行目
+          :chatroom_id => session[:chatroom_id]
+          ↓
+          :chatroom_id => data['room_id']
+    ==> chatroomごとの、chatが実現できた。
+
+(6) sub-chatroom作成の準備
+  【目的】sub-chatroomを作成するために、画面インターフェースを整える。
+    要件定義仕様書：2.1 機能概要
+  【方法】
+    a. chatsの画面で、「サブチャットルーム作成」ボタンを作成する。
+    b. 「サブチャットルーム作成」ボタンが押されたら、全てのchatsに「チェックボックス」を表示する。
+      状態を識別する必要がある。session変数に、session[:make_subchatroom]を用意する。
+      この変数には、「親」となるchatroom_idを格納する。
+      trueなら、チェックボックスを表示し、nil（未定義）なら、通常のチャット画面
+    c. サブチャットルームの作成は、chatroomコントローラに配置する。
+      ボタンを押された --> make_subchatroomアクション --> render new(同じテンプレートを使用)
+    d. 作成後に、チェックの入ったchatsの所属をsubchatroomに写す必要があるため、
+      make_subchatroomアクション内で、session[:subchats]に chatのidのarrayを格納する。
+    e. chatroomコントローラの、createメソッドで、session[:make_subchatroom]を
+      識別し、nilならばトップレベルのchatroomとし、nilでない場合は、
+      create_subメソッドにリダイレクトする。
+    f. chatroomコントローラに、create_subメソッドを作成する。
+      ここでは、
+      <1> chatroomを作成する。この際に、親のIDをsession[:make_subchatroom]とする。
+      <2> 作成したchatroomのidを、すぐに読み出して、sub_chatroom_idとする。
+      <3> session[:subchats]にidが入ったchatsを全て読み出し、chatroom_idを、
+          sub_chatroom_idに書き換える。
+      <4> session[:chatroom_id]に sub_chatroom_idを設定し、chatsのindexにリダイレクトする。
+      <5> 忘れずに、session[:make_subchatroom]を session[:subchats]をnilに戻す。
+
+  【具体的な作業】
+    a. app/views/chats/index.html.erbに、 以下を追加
+      <hr>
+      <%= form_tag "/chatrooms/make_subchatroom/"
+                + session[:chatroom_id].to_s, :method => 'put' do %>
+          <%= submit_tag "サブチャットルーム作成", :name => "sub" %>
+      <% end %>
+    b. config/routes.rbに、chatrooms/make_subchatroomのパス（URL）を登録する。
+        put 'chatrooms/make_subchatroom' => 'chatrooms#make_subchatroom',
+                                          :as => 'make_subchatroom'
+    c. app/controllers/chatrooms_controller.rb に make_subchatroomアクションを追加
+        # PUT /chatrooms/make_subchatroom
+        def make_subchatroom
+          @chatroom = Chatroom.new
+          session[:make_subchatroom] = params[:id]
+          render new
+        end
+    
+    

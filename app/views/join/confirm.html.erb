@@ -1,0 +1,9 @@
+<h1>Chat roomへの参加確認</h1>
+
+<%= @chatroom.name + "に参加しますか？" %>
+<br /><br />
+<%= form_tag "/join/join/" + @chatroom.id.to_s, :method => 'put' do %>
+  <%= submit_tag "参加します", :name => "Join" %>
+<% end %>
+
+<%= link_to "参加しません", chatrooms_path %>

@@ -14,9 +14,13 @@
     <% @chatrooms.each do |chatroom| %>
       <tr>
         <td><%= chatroom.name %></td>
-        <td><%= link_to 'Show', chatroom %></td>
-        <td><%= link_to 'Edit', edit_chatroom_path(chatroom) %></td>
-        <td><%= link_to 'Destroy', chatroom, method: :delete, data: { confirm: 'Are you sure?' } %></td>
+        <!-- td><%= link_to 'Edit', edit_chatroom_path(chatroom) %></td -->
+        <!-- td><%= link_to 'Destroy', chatroom, method: :delete, data: { confirm: 'Are you sure?' } %></td -->
+        <td>
+            <%= form_tag "/join/confirm/" + chatroom.id.to_s, :method => 'put' do %>
+                <%= submit_tag "参加", :name => "Join" %>
+            <% end %>
+        </td>
       </tr>
     <% end %>
   </tbody>

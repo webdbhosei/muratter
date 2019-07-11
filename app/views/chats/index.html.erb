@@ -1,26 +1,13 @@
 <p id="notice"><%= notice %></p>
 
-<h1>Chats</h1>
+<h1><%= @chatroom.name %></h1>
 
 <table>
-  <thead>
-    <tr>
-      <th>Content</th>
-      <th>Chatroom</th>
-      <th>Chat at</th>
-      <th colspan="3"></th>
-    </tr>
-  </thead>
-
   <tbody>
     <% @chats.each do |chat| %>
       <tr>
         <td><%= chat.content %></td>
-        <td><%= chat.chatroom.name %></td>
         <td><%= chat.chat_at.strftime('%Y/%m/%d %H:%M') %></td>
-        <td><%= link_to 'Show', chat %></td>
-        <td><%= link_to 'Edit', edit_chat_path(chat) %></td>
-        <td><%= link_to 'Destroy', chat, method: :delete, data: { confirm: 'Are you sure?' } %></td>
       </tr>
     <% end %>
   </tbody>
@@ -28,10 +15,12 @@
 
 <br>
 
-<%= link_to 'New Chat', new_chat_path %><br />
-
 <%= form_tag '#', id: 'message' do %>
-  <%= text_field_tag 'body' %>
+        <%= hidden_field_tag 'room', session[:chatroom_id] %>
+つぶやく <%= text_field_tag 'body', "", :size => "70" %>
 <% end %>
-<ul id="message-list">
-</ul>
+<hr>
+<%= form_tag "/chatrooms/make_subchatroom/"
+            + session[:chatroom_id].to_s, :method => 'put' do %>
+    <%= submit_tag "サブチャットルーム作成", :name => "sub" %>
+<% end %>

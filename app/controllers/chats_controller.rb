@@ -4,7 +4,8 @@ class ChatsController < ApplicationController
   # GET /chats
   # GET /chats.json
   def index
-    @chats = Chat.all
+    @chats = Chat.where(chatroom_id: session[:chatroom_id])
+    @chatroom = Chatroom.find(session[:chatroom_id])
   end
 
   # GET /chats/1

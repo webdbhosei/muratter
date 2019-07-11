@@ -1,1 +1,23 @@
+<% if session[:my_chatroom] %>
+  <% if @my_rooms and @my_rooms.count>0 %>
+    <table>
+      <% @my_rooms.each do |my_room| %>
+        <tr>
+          <td>
+            <%= my_room.name %>
+          </td>
+          <td>
+              <%= form_tag "/join/enter/" + my_room.id.to_s, :method => 'put' do %>
+                  <%= submit_tag "入室", :name => "Enter" %>
+              <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </table>
+  <% else %>
+        どこのchatroomにも参加していません。
+  <% end %>
+  <% session[:my_chatroom] = nil %>
+<% else %>
 広告募集中
+<% end %>

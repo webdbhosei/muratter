@@ -17,7 +17,8 @@
 
 window.addEventListener('load', () => {
    document.getElementById('message').onsubmit = () => {
-       App.chat.put_message(document.getElementById('body').value);
+       App.chat.put_message(document.getElementById('body').value,
+                            document.getElementById('room').value);
        return false;
    }
 });

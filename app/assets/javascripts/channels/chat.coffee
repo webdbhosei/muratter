@@ -7,10 +7,8 @@ App.chat = App.cable.subscriptions.create "ChatChannel",
 
   received: (data) ->
     # Called when there's incoming data on the websocket for this channel
-    li = document.createElement('li')
-    li.textContent = data
-    document.getElementById('message-list').appendChild(li)
+    window.location.reload(true)
 
-  put_message: (msg) ->
-    @perform('put_message', {message: msg})
+  put_message: (msg, room) ->
+    @perform('put_message', {message: msg, room_id:room})
     return
